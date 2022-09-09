@@ -10,17 +10,20 @@ die() {
 netns_names=($NETNS_NAME)
 wg_names=($WIREGUARD_NAME)
 wg_private_keys=($WIREGUARD_PRIVATE_KEY)
+wg_preshared_keys=($WIREGUARD_PRESHARED_KEY)
 wg_vpn_public_keys=($WIREGUARD_VPN_PUBLIC_KEY)
 wg_endpoints=($WIREGUARD_ENDPOINT)
+wg_ip_addresses=($WIREGUARD_IP_ADDRESSES)
 
 case "$1" in
     up)
-        pre_netns=""
+        pre_netns1=""
+        pre_netns2=""
         allowed_ips="0.0.0.0/0,::0/0"
         mtu="$WIREGUARD_INITIAL_MTU"
         for (( i=0; i<${#netns_names[*]}; ++i))
         do
-            ip $pre_netns link add "${wg_names[$i]}" mtu $mtu type wireguard || die
+            ip $pre_netns1 link add "${wg_names[$i]}" mtu $mtu type wireguard || die
             # reduction for worse-case scenario of IPv6
             mtu=$(($mtu - 80)) 
 
@@ -29,17 +32,27 @@ case "$1" in
                 allowed_ips="$WIREGUARD_ALLOWED_IPS"
             fi
 
-            ip $pre_netns link set "${wg_names[$i]}" netns "${netns_names[$i]}" || die
+	    if [ "${wg_preshared_keys[$i]}" != "-" ]
+	    then
+		    $pre_netns2 wg set "${wg_names[$i]}" \
+			private-key <(echo "${wg_private_keys[$i]}") \
+			peer "${wg_vpn_public_keys[$i]}" \
+			preshared-key <(echo "${wg_preshared_keys[$i]}") \
+			    endpoint "${wg_endpoints[$i]}" \
+			    allowed-ips "$allowed_ips" || die
+	    else
+	    $pre_netns2 wg set "${wg_names[$i]}" \
+		private-key <(echo "${wg_private_keys[$i]}") \
+		peer "${wg_vpn_public_keys[$i]}" \
+		    endpoint "${wg_endpoints[$i]}" \
+		    allowed-ips "$allowed_ips" || die
+	    fi
 
-            ip netns exec "${netns_names[$i]}" wg set "${wg_names[$i]}" \
-                private-key <(echo "${wg_private_keys[$i]}") \
-                peer "${wg_vpn_public_keys[$i]}" \
-                    endpoint "${wg_endpoints[$i]}" \
-                    allowed-ips "$allowed_ips" || die
+            ip $pre_netns1 link set "${wg_names[$i]}" netns "${netns_names[$i]}" || die
 
 
             # Addresses are comma-separated, so to split them.
-            tr ',' '\n' <<<"$WIREGUARD_IP_ADDRESSES" |
+            tr ',' '\n' <<<"${wg_ip_addresses[$i]}" |
                 xargs -I '{}' \
                     ip -n "${netns_names[$i]}" address add '{}' dev "${wg_names[$i]}" || die
 
@@ -51,7 +64,8 @@ case "$1" in
             then
                 ip -n "${netns_names[$i]}" -6 route add default dev "${wg_names[$i]}" || die
             fi
-            pre_netns="-n ${netns_names[$i]}"
+            pre_netns1="-n ${netns_names[$i]}"
+            pre_netns2="ip netns exec ${netns_names[$i]}"
         done
         ;;
     down)

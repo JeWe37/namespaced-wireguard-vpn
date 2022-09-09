@@ -9,9 +9,7 @@ After=network.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-PrivateNetwork=yes
 
-Environment=PRIVATE_NETNS_BIND_MOUNT=/proc/self/ns/net
 EnvironmentFile=/etc/namespaced-wireguard-vpn/namespaced-wireguard-vpn.conf
 
 ExecStart=/usr/sbin/namespaced-wireguard-vpn-netns up

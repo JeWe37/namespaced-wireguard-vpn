@@ -14,12 +14,6 @@ case "$1" in
             ip -n $name link set lo up || die
             last=$name
         done
-
-        if [[ -n "$PRIVATE_NETNS_BIND_MOUNT" ]]
-        then
-            umount "/var/run/netns/$last" || die
-            mount --bind "$PRIVATE_NETNS_BIND_MOUNT" "/var/run/netns/$last" || die
-        fi
         ;;
 
     down)
